@@ -34,6 +34,8 @@ namespace finalProject.Views
         private DispatcherTimer updateTimer;
         private FactoryIOControl factoryControl;
 
+        private bool _isClosing = false;
+
         public ResultDashboard(FactoryIOControl factory)
         {
             InitializeComponent();
@@ -100,6 +102,44 @@ namespace finalProject.Views
 
             // 최근 결과 테이블 업데이트
             UpdateRecentResults(stats);
+
+            // 창 종료 이벤트 핸들러
+            this.Closing += ResultDashboard_Closing;
+        }
+
+        private void ResultDashboard_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (_isClosing) return;
+            _isClosing = true;
+
+            try
+            {
+                Debug.WriteLine("🛑 대시보드 창 닫는 중...");
+
+                if (factoryControl != null)
+                {
+                    factoryControl.StopFactoryIOSystem();
+                    Debug.WriteLine("✅ 컨베이어 정지 및 PLC 초기화 완료");
+                }
+
+                MessageBox.Show(
+                    "✅ 작업이 안전하게 종료되었습니다.\n\n" +
+                    "- 컨베이어: 정지\n" +
+                    "- PLC 신호: 초기화",
+                    "작업 종료",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"⚠ 대시보드 종료 중 오류: {ex.Message}");
+            }
+            finally
+            {
+                // ⭐ Application.Current.Shutdown() 대신 Environment.Exit() 사용
+                Environment.Exit(0);
+            }
         }
 
         /// <summary>
@@ -141,7 +181,7 @@ namespace finalProject.Views
                     GridRecent.Columns[0].Width = new DataGridLength(2, DataGridLengthUnitType.Star); // Time 열을 2배
                     GridRecent.Columns[1].Width = new DataGridLength(1, DataGridLengthUnitType.Star);
                     GridRecent.Columns[2].Width = new DataGridLength(1, DataGridLengthUnitType.Star);
-                    GridRecent.Columns[3].Width = new DataGridLength(1, DataGridLengthUnitType.Star);
+                    GridRecent.Columns[3].Width = new DataGridLength(2, DataGridLengthUnitType.Star);
                 }
             };
         }
@@ -204,7 +244,6 @@ namespace finalProject.Views
         {
             targetCanvas.Children.Clear();
 
-                  // ⭐⭐ 조건 수정: DefectCount == 0 체크 제거 ⭐⭐
             if (stats == null || stats.DefectCountRange == null)
             {
                 Debug.WriteLine("⚠ UpdateDefectCountChart: stats 또는 DefectCountRange가 null");
@@ -235,11 +274,11 @@ namespace finalProject.Views
                            $"7+={stats.DefectCountRange.GetValueOrDefault("7+", 0)}, " +
                            $"Total={totalDefectProducts}");
 
-            //if (totalDefectProducts == 0)
-            //{
-                  //       Debug.WriteLine("⚠ UpdateDefectCountChart: totalDefectProducts = 0");
-            //    return;
-            //}
+            // ⭐ 데이터가 없으면 그냥 빈 차트 표시 ⭐
+            if (totalDefectProducts == 0)
+            {
+                return; // 조용히 종료
+            }
 
             double startAngle = -90;
 

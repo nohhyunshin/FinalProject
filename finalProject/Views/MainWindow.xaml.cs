@@ -3,6 +3,8 @@ using OpenCvSharp;
 using OpenCvSharp.WpfExtensions;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading; // Thread using 추가
+using System.Threading.Tasks; // Task using 추가
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -28,10 +30,8 @@ namespace finalProject
         private bool _isRunning = false;
         private bool _isClosing = false;
 
-        // 안전 검사 관련 변수
-        private bool _safetyCheckEnabled = true;
-        private DateTime _lastWarningTime = DateTime.MinValue;
-        private readonly TimeSpan _warningCooldown = TimeSpan.FromSeconds(5);   // 쿨다운
+        // (신규) 중복 검사 실행 방지 플래그
+        private bool _isCheckRunning = false;
 
         public MainWindow()
         {
@@ -55,15 +55,19 @@ namespace finalProject
         // 창 로드 시 자동 실행 이벤트 핸들러
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            if (!_isClosing)
-            {
-                await StartCameraAsync();
-            }
+            if (_isClosing) return;
+
+            // (신규) 2초 후 캡처 및 분석 실행
+            await StartCameraAndRunCheckAsync();
         }
 
-        public async Task StartCameraAsync()
+        /// <summary>
+        /// (신규) 카메라를 시작하고, 2초 후 1회 캡처 및 분석을 실행합니다.
+        /// </summary>
+        public async Task StartCameraAndRunCheckAsync()
         {
-            if (_isRunning || _isClosing) return;
+            if (_isCheckRunning || _isClosing) return;
+            _isCheckRunning = true; // 검사 중복 실행 방지
 
             try
             {
@@ -80,15 +84,26 @@ namespace finalProject
                 _cts = new CancellationTokenSource();
                 _isRunning = true;
 
+                // (수정) 카메라 루프는 이제 UI 표시만 담당
+                _ = RunCameraLoopAsync(_cts.Token);
+
                 // Live 문구 숨기기
                 liveDot.Visibility = Visibility.Collapsed;
                 txtLive.Visibility = Visibility.Collapsed;
 
-                // 카메라 시작 전 딜레이 2초 (줄일 수도 있음)
-                if (!_isClosing)
+                // (요청사항) 카메라 시작 전 딜레이 2초
+                await Task.Delay(2000, _cts.Token);
+
+                // (요청사항) 2초 후 1회 캡처
+                if (_capture.Read(_frame) && !_frame.Empty() && !_isClosing)
                 {
-                    await Task.Delay(2000, _cts.Token);
-                    await RunCameraLoopAsync(_cts.Token);
+                    // (요청사항) 캡처한 프레임으로 분석 및 화면 전환 실행
+                    // 이 함수가 카메라 중지 및 화면 전환까지 모두 처리합니다.
+                    await SafetyCheck.PerformOneShotCheckAsync(_frame.Clone());
+                }
+                else if (!_isClosing)
+                {
+                    MessageBox.Show("캡처에 실패했습니다.", "Error");
                 }
             }
             catch (OperationCanceledException)
@@ -103,8 +118,13 @@ namespace finalProject
                 }
                 StopCamera();
             }
+            // finally에서 _isCheckRunning = false; 제거
+            // (성공 시 어차피 화면이 넘어가므로)
         }
 
+        /// <summary>
+        /// (수정) 이 루프는 이제 'UI에 카메라 영상 표시'만 담당합니다. (SafetyCheck 제거)
+        /// </summary>
         private async Task RunCameraLoopAsync(CancellationToken token)
         {
             await Task.Run(async () =>
@@ -115,16 +135,11 @@ namespace finalProject
 
                     try
                     {
-
                         if (_capture.Read(_frame) && !_frame.Empty() && !_isClosing)
                         {
-                            // CameraDetection으로 프레임 처리
-                            Mat processedFrame = null;
-
-                            if (_safetyCheckEnabled && !_isClosing)
-                            {
-                                processedFrame = SafetyCheck.ProcessFrame(_frame);
-                            }
+                            // --- (수정) ---
+                            // SafetyCheck.ProcessFrame(_frame); 호출 제거
+                            // ---
 
                             if (!_isClosing && Application.Current != null)
                             {
@@ -157,7 +172,6 @@ namespace finalProject
                                 }
                                 catch (TaskCanceledException)
                                 {
-                                    // Dispatcher 작업이 취소됨, 무시
                                     break;
                                 }
                             }
@@ -166,32 +180,18 @@ namespace finalProject
                         {
                             await Task.Delay(10, token);
                         }
-                        await Task.Delay(15, token);
+                        await Task.Delay(15, token); // UI 표시는 부드럽게
                     }
-                    catch (OperationCanceledException)
-                    {
-                        break; // 정상적인 취소
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        break; // Mat이 해제됨
-                    }
+                    catch (OperationCanceledException) { break; }
+                    catch (ObjectDisposedException) { break; }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"카메라 루프 오류: {ex.Message}");
-
-                        if (!_isClosing)
-                        {
-                            await Task.Delay(100, token); // 잠시 대기 후 재시도
-                        }
-                        else
-                        {
-                            break;
-                        }
+                        if (!_isClosing) { await Task.Delay(100, token); }
+                        else { break; }
                     }
                 }
 
-                // 루프 종료 시 안전하게 Mat 해제
                 try
                 {
                     _frame?.Release();
@@ -208,29 +208,10 @@ namespace finalProject
             Console.WriteLine("카메라 중지 시작...");
             _isRunning = false;
 
-            try
-            {
-                _cts?.Cancel();
-            }
-            catch { }
-
-            // CancellationToken이 처리될 시간을 줌
+            try { _cts?.Cancel(); } catch { }
             Thread.Sleep(100);
-
-            try
-            {
-                _cts?.Dispose();
-                _cts = null;
-            }
-            catch { }
-
-            try
-            {
-                _capture?.Release();
-                _capture?.Dispose();
-                _capture = null;
-            }
-            catch { }
+            try { _cts?.Dispose(); _cts = null; } catch { }
+            try { _capture?.Release(); _capture?.Dispose(); _capture = null; } catch { }
 
             Console.WriteLine("카메라 중지 완료");
         }
@@ -242,14 +223,8 @@ namespace finalProject
 
             StopCamera();
 
-            try
-            {
-                SafetyCheck.Cleanup();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"SafetyCheck 해제 오류: {ex.Message}");
-            }
+            try { SafetyCheck.Cleanup(); }
+            catch (Exception ex) { Console.WriteLine($"SafetyCheck 해제 오류: {ex.Message}"); }
 
             Console.WriteLine("앱 종료 완료");
             base.OnClosing(e);

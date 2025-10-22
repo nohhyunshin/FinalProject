@@ -689,7 +689,7 @@ namespace finalProject.Views
                             List<string> detectedDefects = _roiProcessor.LastDetectedDefects?.ToList() ?? new List<string>();
 
                             // 통계 기록
-                            inspectionStats.RecordInspection(lastInspectionResult, detectedDefects);
+                            inspectionStats.RecordInspection(lastInspectionResult, detectedDefects, _roiProcessor.LastTotalDefectCount);
 
                             // ResultDashboard UI 업데이트 (ResultDashboard가 열려있는 경우)
                             UpdateDashboardStatistics();

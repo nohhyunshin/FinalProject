@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -22,6 +23,14 @@ namespace finalProject.Models
 
         // 이진화 이미지를 UI에 표시하기 위한 이벤트
         public event Action<BitmapSource> BinarizedImageUpdated;
+
+        public int LastTotalDefectCount { get; private set; } = 0;
+
+        // ⭐ 불량 개수 추적을 위한 리스트
+        public List<int> DefectCountHistory { get; private set; } = new List<int>();
+
+        // ⭐ 불량 개수 히스토리 업데이트 이벤트
+        public event Action<List<int>> DefectCountHistoryUpdated;
 
         public ROIProcessor(string savePath, string onnxModelPath)
         {
@@ -84,25 +93,37 @@ namespace finalProject.Models
                 {
                     LastInspectionResult = true;
                     LastDetectedDefects = new List<string>(); // ⭐ 정상일 때 빈 리스트
+                    LastTotalDefectCount = 0;
+
+                    // ⭐ 정상 제품도 0개로 기록
+                    DefectCountHistory.Add(0);
+
                     LogMessageRequested?.Invoke("[센서1] 결과 : 정상");
                 }
                 else
                 {
                     LastInspectionResult = false;
+                    LastTotalDefectCount = detections.Count;
+
+                    // ⭐ 불량 개수 히스토리에 추가
+                    DefectCountHistory.Add(LastTotalDefectCount);
 
                     var defectCounts = detections.GroupBy(d => d.Label)
                                                  .ToDictionary(g => g.Key, g => g.Count());
 
-                    // ⭐⭐ 불량 종류 저장 (여기가 핵심!) ⭐⭐
+                    // 불량 종류 리스트 (중복 제거)
                     LastDetectedDefects = defectCounts.Keys.ToList();
 
-                    LogMessageRequested?.Invoke($"[센서1] 결과 : 불량 (총 {detections.Count}개)");
+                    LogMessageRequested?.Invoke($"[센서1] 결과 : 불량 (총 {LastTotalDefectCount}개)");
 
                     foreach (var defect in defectCounts)
                     {
                         LogMessageRequested?.Invoke($"   - {defect.Key}: {defect.Value}개");
                     }
                 }
+
+                // ⭐ 불량 개수 히스토리 업데이트 이벤트 발생
+                DefectCountHistoryUpdated?.Invoke(new List<int>(DefectCountHistory));
             }
             catch (Exception ex)
             {
@@ -168,10 +189,19 @@ namespace finalProject.Models
                 if (detections == null || detections.Count == 0)
                 {
                     LastInspectionResult = true;
+                    LastTotalDefectCount = 0;
+
+                    // ⭐ 정상 제품도 0개로 기록
+                    DefectCountHistory.Add(0);
                 }
                 else
                 {
                     LastInspectionResult = false;
+                    LastTotalDefectCount = detections.Count;
+
+                    // ⭐ 불량 개수 히스토리에 추가
+                    DefectCountHistory.Add(LastTotalDefectCount);
+
                     LogMessageRequested?.Invoke($"[센서2] 불량 탐지! (총 {detections.Count}개)");
 
                     // 불량 종류별 카운트
@@ -187,6 +217,9 @@ namespace finalProject.Models
                         LogMessageRequested?.Invoke($"   - {defect.Key}: {defect.Value}개");
                     }
                 }
+
+                // ⭐ 불량 개수 히스토리 업데이트 이벤트 발생
+                DefectCountHistoryUpdated?.Invoke(new List<int>(DefectCountHistory));
             }
             catch (Exception ex)
             {
@@ -243,6 +276,15 @@ namespace finalProject.Models
             LogMessageRequested?.Invoke($"이진화 이미지 저장: {binaryFilePath}");
 
             return binarizedBitmap;
+        }
+
+        /// <summary>
+        /// ⭐ 불량 개수 히스토리 초기화
+        /// </summary>
+        public void ClearDefectCountHistory()
+        {
+            DefectCountHistory.Clear();
+            DefectCountHistoryUpdated?.Invoke(new List<int>(DefectCountHistory));
         }
 
         /// <summary>

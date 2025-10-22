@@ -103,7 +103,7 @@ namespace finalProject.Models
         /// <summary>
         /// 검사 결과를 기록합니다
         /// </summary>
-        public void RecordInspection(bool isNormal, List<string> detectedDefects = null)
+        public void RecordInspection(bool isNormal, List<string> detectedDefects = null, int totalDefectCount = 0)
         {
             TotalInspected++;
             inspectionsInCurrentPeriod++;
@@ -118,13 +118,12 @@ namespace finalProject.Models
                 DefectCount++;
                 defectsInCurrentPeriod++;
 
-                int defectCount = 0;
+                // ⭐⭐ totalDefectCount를 매개변수로 받아서 사용 ⭐⭐
+                int defectCount = totalDefectCount;
 
                 // 불량 유형별 카운트 증가
                 if (detectedDefects != null && detectedDefects.Count > 0)
                 {
-                    defectCount = detectedDefects.Count;
-
                     foreach (var defect in detectedDefects)
                     {
                         if (DefectTypeCount.ContainsKey(defect))
@@ -133,8 +132,8 @@ namespace finalProject.Models
                         }
                     }
 
-                    // 최근 결과에 추가 (첫 번째 불량 유형을 대표로 표시)
-                    AddRecentResult(detectedDefects[0], "NG", detectedDefects.Count);
+                    string defectTypes = string.Join(", ", detectedDefects);
+                    AddRecentResult(defectTypes, "NG", defectCount);
                 }
                 else
                 {
@@ -142,7 +141,7 @@ namespace finalProject.Models
                     AddRecentResult("Unknown", "NG", 1);
                 }
 
-                // ⭐⭐ 불량 개수 범위별 카운트 증가 ⭐⭐
+                // ⭐⭐ 실제 불량 개수로 범위 분류 ⭐⭐
                 if (defectCount >= 1 && defectCount <= 2)
                 {
                     DefectCountRange["1-2"]++;
@@ -161,11 +160,9 @@ namespace finalProject.Models
                 }
             }
 
-            // ⭐ 일정 시간마다 불량률 기록 (1분마다 또는 10회 검사마다) ⭐
             UpdateDefectRateHistory();
         }
 
-        /*
         /// <summary>
         /// 시간대별 불량률 업데이트 (1분마다 또는 10회 검사마다)
         /// </summary>
@@ -200,36 +197,7 @@ namespace finalProject.Models
                 defectsInCurrentPeriod = 0;
             }
         }
-        */
 
-        /// <summary>
-        /// 시간대별 불량률 업데이트 (테스트용 - 매 검사마다 기록)
-        /// </summary>
-        private void UpdateDefectRateHistory()
-        {
-            var now = DateTime.Now;
-
-            // ⭐ 테스트용: 매 검사마다 누적 불량률 기록 ⭐
-            if (TotalInspected > 0)
-            {
-                double currentRate = Math.Round(
-                    (double)DefectCount / TotalInspected * 100, 2);
-
-                DefectRateHistory.Add(new DefectRatePoint
-                {
-                    Time = now,
-                    Rate = currentRate
-                });
-
-                Debug.WriteLine($"📈 불량률 기록: {TotalInspected}회 검사, 불량률 {currentRate}%");
-
-                // 최대 20개 포인트만 유지
-                while (DefectRateHistory.Count > 20)
-                {
-                    DefectRateHistory.RemoveAt(0);
-                }
-            }
-        }
 
         /// <summary>
         /// 최근 결과 리스트에 추가

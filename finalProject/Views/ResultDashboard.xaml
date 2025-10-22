@@ -117,12 +117,15 @@
             <!-- Recent Result -->
             <StackPanel Grid.Row="1" Grid.Column="1" Margin="5" Background="#181B22">
                 <GroupBox Margin="7" Header="Recent Results" Foreground="#98A2B3" FontSize="16" BorderThickness="0">
-                    <DataGrid x:Name="GridRecent" Grid.Row="1" Margin="0,8,0,0"
-                              AutoGenerateColumns="True" HeadersVisibility="Column"
-                              Background="#1E232E" Foreground="#EDEFF3"
-                              BorderBrush="#222833" HorizontalGridLinesBrush="#222833" VerticalGridLinesBrush="#222833"
-                              RowBackground="#202735" AlternatingRowBackground="#1E232E"
-                              IsReadOnly="True" RowHeight="34" FontSize="14">
+                    <DataGrid x:Name="GridRecent" Margin="0,8,0,0"
+                  MaxHeight="150"
+                  AutoGenerateColumns="True" HeadersVisibility="Column"
+                  Background="#1E232E" Foreground="#EDEFF3"
+                  BorderBrush="#222833" HorizontalGridLinesBrush="#222833" VerticalGridLinesBrush="#222833"
+                  RowBackground="#202735" AlternatingRowBackground="#1E232E"
+                  VerticalScrollBarVisibility="Auto" 
+                  HorizontalScrollBarVisibility="Disabled"
+                  IsReadOnly="True" RowHeight="34" FontSize="14">
                         <DataGrid.ColumnHeaderStyle>
                             <Style TargetType="DataGridColumnHeader">
                                 <Setter Property="Background" Value="#1D2330"/>

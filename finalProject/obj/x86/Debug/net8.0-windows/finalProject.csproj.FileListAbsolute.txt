@@ -229,3 +229,4 @@ C:\Users\user\source\repos\PLC_pj\Camera\finalProject\bin\x86\Debug\net8.0-windo
 C:\Users\user\source\repos\PLC_pj\Camera\finalProject\bin\x86\Debug\net8.0-windows\finalProject.pdb
 C:\Users\user\source\repos\PLC_pj\Camera\finalProject\obj\x86\Debug\net8.0-windows\finalProject.genruntimeconfig.cache
 C:\Users\user\source\repos\PLC_pj\Camera\finalProject\obj\x86\Debug\net8.0-windows\ref\finalProject.dll
+C:\Users\user\source\repos\PLC_pj\Camera\finalProject\obj\x86\Debug\net8.0-windows\App.baml
