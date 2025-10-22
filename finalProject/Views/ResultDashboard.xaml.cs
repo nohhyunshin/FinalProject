@@ -36,11 +36,21 @@ namespace finalProject.Views
 
         private bool _isClosing = false;
 
+        // ⭐ ObservableCollection 사용으로 깜빡임 방지
+        private ObservableCollection<RecentResultItem> recentResultsList;
+
         public ResultDashboard(FactoryIOControl factory)
         {
             InitializeComponent();
 
             factoryControl = factory;
+
+            // ⭐ ObservableCollection 초기화
+            recentResultsList = new ObservableCollection<RecentResultItem>();
+            GridRecent.ItemsSource = recentResultsList;
+
+            // ⭐ DataGrid 열 자동 생성 이벤트 (고정 너비 설정)
+            GridRecent.AutoGeneratingColumn += GridRecent_AutoGeneratingColumn;
 
             // FactoryIOControl의 통계 업데이트 이벤트 구독
             factoryControl.OnStatisticsUpdated += UpdateStatisticsUI;
@@ -56,13 +66,40 @@ namespace finalProject.Views
 
             // Export 버튼 이벤트 연결
             BtnExport.Click += BtnExport_Click;
+
+            // 창 종료 이벤트 핸들러
+            this.Closing += ResultDashboard_Closing;
+        }
+
+        /// <summary>
+        /// ⭐ DataGrid 열 너비를 고정값으로 설정 (픽셀 단위)
+        /// </summary>
+        private void GridRecent_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
+        {
+            // 각 속성명에 따라 고정 너비 설정
+            switch (e.PropertyName)
+            {
+                case "Time":
+                    e.Column.Width = 80; // 시간 열: 100px
+                    e.Column.Header = "Time";
+                    break;
+                case "Count":
+                    e.Column.Width = 60; // 타입 열: 100px
+                    e.Column.Header = "Count";
+                    break;
+                case "Result":
+                    e.Column.Width = 60; // 결과 열: 80px
+                    e.Column.Header = "Result";
+                    break;
+                case "Type":
+                    e.Column.Width = new DataGridLength(1, DataGridLengthUnitType.Star); // 나머지 공간
+                    e.Column.Header = "Type";
+                    break;
+            }
         }
 
         private void LoadInitialData()
         {
-            // DataGrid 열 너비 설정
-            ConfigureDataGridColumns();
-    
             if (factoryControl != null)
             {
                 var stats = factoryControl.GetCurrentStatistics();
@@ -87,24 +124,26 @@ namespace finalProject.Views
         {
             if (stats == null) return;
 
-            // KPI 업데이트
-            TxtTotal.Text = stats.TotalInspected.ToString();
-            TxtNg.Text = stats.DefectCount.ToString();
-            TxtConf.Text = $"{stats.NormalRate}%";
-            TxtRate.Text = $"{stats.DefectRate}%";
+            // ⭐ UI 업데이트를 Dispatcher로 비동기 처리 (깜빡임 방지)
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // KPI 업데이트
+                TxtTotal.Text = stats.TotalInspected.ToString();
+                TxtNg.Text = stats.DefectCount.ToString();
+                TxtConf.Text = $"{stats.NormalRate:F1}%";
+                TxtRate.Text = $"{stats.DefectRate:F1}%";
 
-            // Pie Chart 데이터 업데이트
-            UpdatePieChart(stats, PieCanvas);
-            UpdateDefectCountChart(stats, PieCanvas2);
+                // Pie Chart 데이터 업데이트
+                UpdatePieChart(stats, PieCanvas);
+                UpdateDefectCountChart(stats, PieCanvas2);
 
-            // Line Chart 데이터 업데이트
-            DrawDefectRateChart();
+                // Line Chart 데이터 업데이트
+                DrawDefectRateChart();
 
-            // 최근 결과 테이블 업데이트
-            UpdateRecentResults(stats);
+                // 최근 결과 테이블 업데이트
+                UpdateRecentResults(stats);
 
-            // 창 종료 이벤트 핸들러
-            this.Closing += ResultDashboard_Closing;
+            }), DispatcherPriority.Background); // ⭐ 낮은 우선순위로 처리
         }
 
         private void ResultDashboard_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -114,26 +153,24 @@ namespace finalProject.Views
 
             try
             {
-                Debug.WriteLine("🛑 대시보드 창 닫는 중...");
+                Debug.WriteLine("대시 보드 WPF 닫는 중...");
 
                 if (factoryControl != null)
                 {
                     factoryControl.StopFactoryIOSystem();
-                    Debug.WriteLine("✅ 컨베이어 정지 및 PLC 초기화 완료");
+                    Debug.WriteLine("컨베이어 정지 및 PLC 초기화 완료");
                 }
 
-                MessageBox.Show(
-                    "✅ 작업이 안전하게 종료되었습니다.\n\n" +
+                Debug.WriteLine(
+                    "작업이 안전하게 종료되었습니다.\n\n" +
                     "- 컨베이어: 정지\n" +
                     "- PLC 신호: 초기화",
-                    "작업 종료",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information
+                    "작업 종료"
                 );
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"⚠ 대시보드 종료 중 오류: {ex.Message}");
+                Debug.WriteLine($"대시 보드 WPF 종료 중 오류: {ex.Message}");
             }
             finally
             {
@@ -143,47 +180,45 @@ namespace finalProject.Views
         }
 
         /// <summary>
-        /// 최근 검사 결과 테이블 업데이트
+        /// ⭐ 최근 검사 결과 테이블 업데이트 (ObservableCollection 사용으로 깜빡임 방지)
         /// </summary>
         private void UpdateRecentResults(InspectionStatistics stats)
         {
             if (stats?.RecentResults == null) return;
 
-            // 최근 10개만 표시
-            var recentData = stats.RecentResults.Take(10).Select(r => new
-            {
-                Time = r.Time.ToString("HH:mm:ss"),
-                Type = r.Type,
-                Result = r.Result,
-                Count = r.DefectCount > 0 ? r.DefectCount.ToString() : "-"
-            }).ToList();
+            // 최근 10개만 가져오기
+            var newData = stats.RecentResults.Take(10).ToList();
 
-            GridRecent.ItemsSource = recentData;
-        }
-
-        /// <summary>
-        /// DataGrid 열 너비를 동일하게 설정
-        /// </summary>
-        private void ConfigureDataGridColumns()
-        {
-            // DataGrid가 로드된 후에 열 설정
-            GridRecent.Loaded += (s, e) =>
+            // ⭐ 기존 데이터와 비교하여 변경사항이 있을 때만 업데이트
+            if (recentResultsList.Count == newData.Count)
             {
-                if (GridRecent.Columns.Count > 0)
+                bool hasChanges = false;
+                for (int i = 0; i < newData.Count; i++)
                 {
-                              // 모든 열을 균등하게 분배
-                    //foreach (var column in GridRecent.Columns)
-                    //{
-                    //    column.Width = new DataGridLength(1, DataGridLengthUnitType.Star);
-                    //}
-
-                              // 또는 특정 비율로 설정
-                    GridRecent.Columns[0].Width = new DataGridLength(2, DataGridLengthUnitType.Star); // Time 열을 2배
-                    GridRecent.Columns[1].Width = new DataGridLength(1, DataGridLengthUnitType.Star);
-                    GridRecent.Columns[2].Width = new DataGridLength(1, DataGridLengthUnitType.Star);
-                    GridRecent.Columns[3].Width = new DataGridLength(2, DataGridLengthUnitType.Star);
+                    if (recentResultsList[i].Time != newData[i].Time.ToString("HH:mm:ss") ||
+                        recentResultsList[i].Type != newData[i].Type ||
+                        recentResultsList[i].Result != newData[i].Result)
+                    {
+                        hasChanges = true;
+                        break;
+                    }
                 }
-            };
+
+                if (!hasChanges) return; // 변경사항 없으면 업데이트 안 함
+            }
+
+            // ⭐ ObservableCollection 업데이트 (Clear + AddRange)
+            recentResultsList.Clear();
+            foreach (var r in newData)
+            {
+                recentResultsList.Add(new RecentResultItem
+                {
+                    Time = r.Time.ToString("HH:mm:ss"),
+                    Type = r.Type,
+                    Result = r.Result,
+                    Count = r.DefectCount > 0 ? r.DefectCount.ToString() : "-"
+                });
+            }
         }
 
         /// <summary>
@@ -244,11 +279,10 @@ namespace finalProject.Views
         {
             targetCanvas.Children.Clear();
 
-            if (stats == null || stats.DefectCountRange == null)
-            {
-                Debug.WriteLine("⚠ UpdateDefectCountChart: stats 또는 DefectCountRange가 null");
-                return;
-            }
+            // ⭐ 디버그: 불량 개수 출력
+            Debug.WriteLine($"📊 불량 개수 차트 - DefectCount: {stats.DefectCount}");
+
+            if (stats.DefectCount == 0) return;
 
             double canvasWidth = 250;
             double canvasHeight = 250;
@@ -257,100 +291,166 @@ namespace finalProject.Views
             double outerRadius = Math.Min(canvasWidth, canvasHeight) / 2 - 20;
             double innerRadius = outerRadius * 0.70;
 
-            // 불량 개수 범위별 데이터 - 안전한 접근
-            var defectRanges = new[]
+            // ⭐ 디버그: 범위별 개수 출력
+            Debug.WriteLine($"   1-2: {stats.DefectCountRange["1-2"]}");
+            Debug.WriteLine($"   3-4: {stats.DefectCountRange["3-4"]}");
+            Debug.WriteLine($"   5-6: {stats.DefectCountRange["5-6"]}");
+            Debug.WriteLine($"   7+: {stats.DefectCountRange["7+"]}");
+
+            // 불량 개수 범위별 분류
+            var ranges = new[]
             {
-                new { Name = "1-2", Count = stats.DefectCountRange.ContainsKey("1-2") ? stats.DefectCountRange["1-2"] : 0, Color = "#789DBC" },
-                new { Name = "3-4", Count = stats.DefectCountRange.ContainsKey("3-4") ? stats.DefectCountRange["3-4"] : 0, Color = "#FFE3E3" },
-                new { Name = "5-6", Count = stats.DefectCountRange.ContainsKey("5-6") ? stats.DefectCountRange["5-6"] : 0, Color = "#FEF9F2" },
-                new { Name = "7+", Count = stats.DefectCountRange.ContainsKey("7+") ? stats.DefectCountRange["7+"] : 0, Color = "#C9E9D2" }
-            }.Where(d => d.Count > 0).ToArray();
+                new { Name = "1-2 defects", Count = stats.DefectCountRange["1-2"], Color = "#789DBC" },
+                new { Name = "3-4 defects", Count = stats.DefectCountRange["3-4"], Color = "#D6A99D" },
+                new { Name = "5-6 defects", Count = stats.DefectCountRange["5-6"], Color = "#FBF3D5" },
+                new { Name = "7+ defects", Count = stats.DefectCountRange["7+"], Color = "#9CAFAA" }
+            }.Where(r => r.Count > 0).ToArray();
 
-            int totalDefectProducts = defectRanges.Sum(d => d.Count);
+            int totalCount = ranges.Sum(r => r.Count);
 
-            Debug.WriteLine($"📊 UpdateDefectCountChart: 1-2={stats.DefectCountRange.GetValueOrDefault("1-2", 0)}, " +
-                           $"3-4={stats.DefectCountRange.GetValueOrDefault("3-4", 0)}, " +
-                           $"5-6={stats.DefectCountRange.GetValueOrDefault("5-6", 0)}, " +
-                           $"7+={stats.DefectCountRange.GetValueOrDefault("7+", 0)}, " +
-                           $"Total={totalDefectProducts}");
+            // ⭐ 디버그: 필터링 후 총 개수
+            Debug.WriteLine($"   필터링 후 totalCount: {totalCount}");
 
-            // ⭐ 데이터가 없으면 그냥 빈 차트 표시 ⭐
-            if (totalDefectProducts == 0)
+            if (totalCount == 0)
             {
-                return; // 조용히 종료
+                Debug.WriteLine("   ⚠️ totalCount가 0이어서 그래프 안 그림!");
+                return;
             }
 
             double startAngle = -90;
 
-            foreach (var range in defectRanges)
+            foreach (var range in ranges)
             {
-                double sweepAngle = (double)range.Count / totalDefectProducts * 360;
-                Debug.WriteLine($"🎨 차트: {range.Name} = {range.Count}개 ({sweepAngle:F1}도)");
+                double sweepAngle = (double)range.Count / totalCount * 360;
 
                 var donut = CreateDonutSlice(centerX, centerY, outerRadius, innerRadius, startAngle, sweepAngle, range.Color);
                 targetCanvas.Children.Add(donut);
+
                 startAngle += sweepAngle;
             }
         }
 
         /// <summary>
-        /// 도넛 차트 조각 생성 (얇은 링 형태)
+        /// 도넛 조각 생성
         /// </summary>
-        private System.Windows.Shapes.Path CreateDonutSlice(double centerX, double centerY,
+        private ShapePath CreateDonutSlice(double centerX, double centerY,
             double outerRadius, double innerRadius, double startAngle, double sweepAngle, string colorHex)
         {
+            if (sweepAngle <= 0) return null;
+
+            // ⭐ 360도 전체 도넛인 경우 특별 처리 ⭐
+            if (sweepAngle >= 359.9)
+            {
+                return CreateFullDonut(centerX, centerY, outerRadius, innerRadius, colorHex);
+            }
+
             double startRad = startAngle * Math.PI / 180;
             double endRad = (startAngle + sweepAngle) * Math.PI / 180;
 
-            // 외부 원호의 시작/끝점
-            double outerX1 = centerX + outerRadius * Math.Cos(startRad);
-            double outerY1 = centerY + outerRadius * Math.Sin(startRad);
-            double outerX2 = centerX + outerRadius * Math.Cos(endRad);
-            double outerY2 = centerY + outerRadius * Math.Sin(endRad);
+            // 외곽 호
+            Point outerStart = new Point(centerX + outerRadius * Math.Cos(startRad), centerY + outerRadius * Math.Sin(startRad));
+            Point outerEnd = new Point(centerX + outerRadius * Math.Cos(endRad), centerY + outerRadius * Math.Sin(endRad));
 
-            // 내부 원호의 시작/끝점
-            double innerX1 = centerX + innerRadius * Math.Cos(startRad);
-            double innerY1 = centerY + innerRadius * Math.Sin(startRad);
-            double innerX2 = centerX + innerRadius * Math.Cos(endRad);
-            double innerY2 = centerY + innerRadius * Math.Sin(endRad);
+            // 내부 호
+            Point innerStart = new Point(centerX + innerRadius * Math.Cos(startRad), centerY + innerRadius * Math.Sin(startRad));
+            Point innerEnd = new Point(centerX + innerRadius * Math.Cos(endRad), centerY + innerRadius * Math.Sin(endRad));
 
-            bool largeArc = sweepAngle > 180;
+            bool isLargeArc = sweepAngle > 180;
 
-            var pathFigure = new System.Windows.Media.PathFigure
+            PathFigure figure = new PathFigure { StartPoint = outerStart };
+            figure.Segments.Add(new ArcSegment
             {
-                StartPoint = new Point(outerX1, outerY1),
-                IsClosed = true
+                Point = outerEnd,
+                Size = new Size(outerRadius, outerRadius),
+                SweepDirection = SweepDirection.Clockwise,
+                IsLargeArc = isLargeArc
+            });
+            figure.Segments.Add(new LineSegment { Point = innerEnd });
+            figure.Segments.Add(new ArcSegment
+            {
+                Point = innerStart,
+                Size = new Size(innerRadius, innerRadius),
+                SweepDirection = SweepDirection.Counterclockwise,
+                IsLargeArc = isLargeArc
+            });
+            figure.IsClosed = true;
+
+            PathGeometry geometry = new PathGeometry();
+            geometry.Figures.Add(figure);
+
+            var path = new ShapePath
+            {
+                Data = geometry,
+                Fill = (Brush)new BrushConverter().ConvertFrom(colorHex),
+                Stroke = Brushes.Transparent,
+                StrokeThickness = 0
             };
 
-            // 외부 원호
-            pathFigure.Segments.Add(new System.Windows.Media.ArcSegment(
-                new Point(outerX2, outerY2),
-                new Size(outerRadius, outerRadius),
-                0,
-                largeArc,
-                System.Windows.Media.SweepDirection.Clockwise,
-                true));
+            return path;
+        }
 
-            // 끝점에서 내부로 연결
-            pathFigure.Segments.Add(new System.Windows.Media.LineSegment(new Point(innerX2, innerY2), true));
-
-            // 내부 원호 (반대 방향)
-            pathFigure.Segments.Add(new System.Windows.Media.ArcSegment(
-                new Point(innerX1, innerY1),
-                new Size(innerRadius, innerRadius),
-                0,
-                largeArc,
-                System.Windows.Media.SweepDirection.Counterclockwise,
-                true));
-
-            var pathGeometry = new System.Windows.Media.PathGeometry();
-            pathGeometry.Figures.Add(pathFigure);
-
-            var path = new System.Windows.Shapes.Path
+        /// <summary>
+        /// ⭐ 360도 전체 도넛 생성 (단일 범위가 100%일 때) ⭐
+        /// </summary>
+        private ShapePath CreateFullDonut(double centerX, double centerY,
+            double outerRadius, double innerRadius, string colorHex)
+        {
+            // 두 개의 반원을 합쳐서 완전한 원 생성
+            PathFigure figure = new PathFigure
             {
-                Fill = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colorHex)),
-                Data = pathGeometry
+                StartPoint = new Point(centerX + outerRadius, centerY)
+            };
+
+            // 외곽 반원 1
+            figure.Segments.Add(new ArcSegment
+            {
+                Point = new Point(centerX - outerRadius, centerY),
+                Size = new Size(outerRadius, outerRadius),
+                SweepDirection = SweepDirection.Clockwise,
+                IsLargeArc = true
+            });
+
+            // 외곽 반원 2
+            figure.Segments.Add(new ArcSegment
+            {
+                Point = new Point(centerX + outerRadius, centerY),
+                Size = new Size(outerRadius, outerRadius),
+                SweepDirection = SweepDirection.Clockwise,
+                IsLargeArc = true
+            });
+
+            // 내부 원으로 연결
+            figure.Segments.Add(new LineSegment { Point = new Point(centerX + innerRadius, centerY) });
+
+            // 내부 반원 1 (반대 방향)
+            figure.Segments.Add(new ArcSegment
+            {
+                Point = new Point(centerX - innerRadius, centerY),
+                Size = new Size(innerRadius, innerRadius),
+                SweepDirection = SweepDirection.Counterclockwise,
+                IsLargeArc = true
+            });
+
+            // 내부 반원 2 (반대 방향)
+            figure.Segments.Add(new ArcSegment
+            {
+                Point = new Point(centerX + innerRadius, centerY),
+                Size = new Size(innerRadius, innerRadius),
+                SweepDirection = SweepDirection.Counterclockwise,
+                IsLargeArc = true
+            });
+
+            figure.IsClosed = true;
+
+            PathGeometry geometry = new PathGeometry();
+            geometry.Figures.Add(figure);
+
+            var path = new ShapePath
+            {
+                Data = geometry,
+                Fill = (Brush)new BrushConverter().ConvertFrom(colorHex),
+                Stroke = Brushes.Transparent,
+                StrokeThickness = 0
             };
 
             return path;
@@ -507,6 +607,22 @@ namespace finalProject.Views
 
             var stats = factoryControl.GetCurrentStatistics();
 
+            // 날짜 필터 가져오기
+            DateTime? fromDate = FromDate.SelectedDate;
+            DateTime? toDate = ToDate.SelectedDate;
+
+            // 제품 필터 가져오기 (ComboBox에서 선택된 항목)
+            string selectedProduct = null;
+            if (ProductFilter.SelectedItem is ComboBoxItem selectedItem)
+            {
+                string content = selectedItem.Content?.ToString();
+                // "All"이 아닌 경우에만 필터로 사용
+                if (content != "All")
+                {
+                    selectedProduct = content;
+                }
+            }
+
             // CSV 파일 저장 다이얼로그
             var saveDialog = new Microsoft.Win32.SaveFileDialog
             {
@@ -516,21 +632,35 @@ namespace finalProject.Views
 
             if (saveDialog.ShowDialog() == true)
             {
-                ExportToCSV(stats, saveDialog.FileName);
+                ExportToCSV(stats, saveDialog.FileName, fromDate, toDate, selectedProduct);
                 MessageBox.Show("CSV 파일이 저장되었습니다.", "저장 완료",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
         /// <summary>
-        /// CSV 파일로 내보내기
+        /// CSV 파일로 내보내기 (필터 적용)
         /// </summary>
-        private void ExportToCSV(InspectionStatistics stats, string filePath)
+        private void ExportToCSV(InspectionStatistics stats, string filePath, DateTime? fromDate, DateTime? toDate, string selectedProduct)
         {
             var csv = new System.Text.StringBuilder();
 
             csv.AppendLine("PCB Defect Inspection Report");
             csv.AppendLine($"생성일시,{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+
+            // 필터 정보 추가
+            if (fromDate.HasValue || toDate.HasValue || !string.IsNullOrEmpty(selectedProduct))
+            {
+                csv.AppendLine();
+                csv.AppendLine("=== 적용된 필터 ===");
+                if (fromDate.HasValue)
+                    csv.AppendLine($"시작 날짜,{fromDate.Value:yyyy-MM-dd}");
+                if (toDate.HasValue)
+                    csv.AppendLine($"종료 날짜,{toDate.Value:yyyy-MM-dd}");
+                if (!string.IsNullOrEmpty(selectedProduct))
+                    csv.AppendLine($"불량 유형 필터,{selectedProduct}");
+            }
+
             csv.AppendLine();
 
             csv.AppendLine("=== 전체 통계 ===");
@@ -552,12 +682,34 @@ namespace finalProject.Views
             }
 
             csv.AppendLine();
-            csv.AppendLine("=== 최근 검사 결과 ===");
+            csv.AppendLine("=== 최근 검사 결과 (필터 적용) ===");
             csv.AppendLine("시간,유형,결과,불량개수");
 
-            foreach (var result in stats.RecentResults.Take(50))
+            // 필터링 로직 적용
+            var filteredResults = stats.RecentResults.AsEnumerable();
+
+            // 날짜 필터링
+            if (fromDate.HasValue)
             {
-                csv.AppendLine($"{result.Time:yyyy-MM-dd HH:mm:ss},{result.Type},{result.Result},{result.DefectCount}");
+                filteredResults = filteredResults.Where(r => r.Time.Date >= fromDate.Value.Date);
+            }
+            if (toDate.HasValue)
+            {
+                filteredResults = filteredResults.Where(r => r.Time.Date <= toDate.Value.Date);
+            }
+
+            // 제품 타입 필터링 (Type 컬럼에 선택된 불량 타입이 포함되어 있는지 확인)
+            if (!string.IsNullOrEmpty(selectedProduct))
+            {
+                filteredResults = filteredResults.Where(r =>
+                    !string.IsNullOrEmpty(r.Type) &&
+                    r.Type.Contains(selectedProduct, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // CSV 출력 (Type을 큰따옴표로 감싸서 한 셀에 표시)
+            foreach (var result in filteredResults.Take(50))
+            {
+                csv.AppendLine($"{result.Time:yyyy-MM-dd HH:mm:ss},\"{result.Type}\",{result.Result},{result.DefectCount}");
             }
 
             System.IO.File.WriteAllText(filePath, csv.ToString(), System.Text.Encoding.UTF8);
@@ -587,5 +739,14 @@ namespace finalProject.Views
 
             base.OnClosed(e);
         }
+    }
+
+    // ⭐ DataGrid 바인딩용 클래스 추가
+    public class RecentResultItem
+    {
+        public string Time { get; set; }
+        public string Type { get; set; }
+        public string Result { get; set; }
+        public string Count { get; set; }
     }
 }

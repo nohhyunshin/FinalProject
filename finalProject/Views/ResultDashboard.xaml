@@ -116,8 +116,7 @@
 
             <!-- Recent Result -->
             <StackPanel Grid.Row="1" Grid.Column="1" Margin="5" Background="#181B22">
-                <GroupBox Margin="7" Header="Recent Results" Foreground="#98A2B3" FontSize="16" BorderThickness="0">
-                    <DataGrid x:Name="GridRecent" Margin="0,8,0,0"
+                <DataGrid x:Name="GridRecent" Margin="0,8,0,0"
                   MaxHeight="150"
                   AutoGenerateColumns="True" HeadersVisibility="Column"
                   Background="#1E232E" Foreground="#EDEFF3"
@@ -126,31 +125,30 @@
                   VerticalScrollBarVisibility="Auto" 
                   HorizontalScrollBarVisibility="Disabled"
                   IsReadOnly="True" RowHeight="34" FontSize="14">
-                        <DataGrid.ColumnHeaderStyle>
-                            <Style TargetType="DataGridColumnHeader">
-                                <Setter Property="Background" Value="#1D2330"/>
-                                <Setter Property="Foreground" Value="#EDEFF3"/>
-                                <Setter Property="BorderBrush" Value="#222833"/>
-                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
-                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
-                            </Style>
-                        </DataGrid.ColumnHeaderStyle>
-                        <DataGrid.RowStyle>
-                            <Style TargetType="DataGridRow">
-                                <Setter Property="Background" Value="#202735"/>
-                                <Setter Property="Foreground" Value="#EDEFF3"/>
-                                <Setter Property="BorderBrush" Value="Transparent"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsSelected" Value="True">
-                                        <Setter Property="Background" Value="#2E3A4D"/>
-                                        <Setter Property="Foreground" Value="#FFFFFF"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DataGrid.RowStyle>
-                    </DataGrid>
-                </GroupBox>
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="#1D2330"/>
+                            <Setter Property="Foreground" Value="#EDEFF3"/>
+                            <Setter Property="BorderBrush" Value="#222833"/>
+                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    <DataGrid.RowStyle>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="Background" Value="#202735"/>
+                            <Setter Property="Foreground" Value="#EDEFF3"/>
+                            <Setter Property="BorderBrush" Value="Transparent"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#2E3A4D"/>
+                                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGrid.RowStyle>
+                </DataGrid>
             </StackPanel>
         </Grid>
 
@@ -207,15 +205,15 @@
                             <TextBlock Text="1-2 defects" Foreground="#EDEFF3"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Rectangle Width="14" Height="14" Fill="#FFE3E3" Margin="0,0,8,0"/>
+                            <Rectangle Width="14" Height="14" Fill="#D6A99D" Margin="0,0,8,0"/>
                             <TextBlock Text="3-4 defects" Foreground="#EDEFF3"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Rectangle Width="14" Height="14" Fill="#FEF9F2" Margin="0,0,8,0"/>
+                            <Rectangle Width="14" Height="14" Fill="#FBF3D5" Margin="0,0,8,0"/>
                             <TextBlock Text="5-6 defects" Foreground="#EDEFF3"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <Rectangle Width="14" Height="14" Fill="#C9E9D2" Margin="0,0,8,0"/>
+                            <Rectangle Width="14" Height="14" Fill="#9CAFAA" Margin="0,0,8,0"/>
                             <TextBlock Text="7+ defects" Foreground="#EDEFF3"/>
                         </StackPanel>
                     </StackPanel>
