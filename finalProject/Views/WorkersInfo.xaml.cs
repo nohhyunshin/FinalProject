@@ -31,6 +31,7 @@ namespace finalProject.Views
         private bool sirenVisible = true;
         private FactoryIOControl factoryIOControl;
         private DispatcherTimer connectionCheckTimer;
+        private bool isTransitioningToDashboard = false;
 
         public WorkersInfo()
         {
@@ -174,6 +175,7 @@ namespace finalProject.Views
             // 5. ResultDashboard 창 열기
             ResultDashboard dashboard = new ResultDashboard(factoryIOControl);
             dashboard.Show();
+            isTransitioningToDashboard = true;
 
             // 6. 현재 WorkersInfo 창 닫기
             this.Close();
@@ -187,6 +189,13 @@ namespace finalProject.Views
 
             try
             {
+                if (isTransitioningToDashboard)
+                {
+                    Debug.WriteLine("=== WorkersInfo → ResultDashboard 전환 ===");
+                    // factoryIOControl은 대시보드로 전달되었으므로 종료하지 않음
+                    return;
+                }
+
                 Debug.WriteLine("=== WorkersInfo 창 종료 - 프로그램 종료 시작 ===");
 
                 // SafetyCheck 리소스 정리
@@ -220,7 +229,10 @@ namespace finalProject.Views
             finally
             {
                 // 전체 애플리케이션 종료
-                Application.Current.Shutdown();
+                if (!isTransitioningToDashboard)
+                {
+                    Application.Current.Shutdown();
+                }
             }
         }
     }
