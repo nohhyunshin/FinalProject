@@ -67,13 +67,17 @@ namespace finalProject.Models
                 return;
             }
 
+            Mat capturedFrame = null;
+
             try
             {
                 Debug.WriteLine("=== One-Shot Check Start ===");
 
+                capturedFrame = frame.Clone();
+
                 // 1. 안면 인식과 PPE 분석을 병렬로 시작
-                Task<Worker> faceTask = FaceRecognitionService.RecognizeFaceAsync(frame.Clone());
-                Task<PPEResult> ppeTask = RunYoloCheckAsync(frame.Clone());
+                Task<Worker> faceTask = FaceRecognitionService.RecognizeFaceAsync(frame);
+                Task<PPEResult> ppeTask = RunYoloCheckAsync(frame);
 
                 // 2. 두 작업이 모두 끝날 때까지 대기
                 await Task.WhenAll(faceTask, ppeTask);
@@ -85,54 +89,59 @@ namespace finalProject.Models
                 Debug.WriteLine($"[결과] 안면 인식: {recognizedWorker?.Name ?? "UNKNOWN"}");
                 Debug.WriteLine($"[결과] PPE: Helmet={ppeResult.HasHelmet}, Vest={ppeResult.HasVest}, Gloves={ppeResult.HasGloves}, Goggles={ppeResult.HasGoggles}");
 
-                // ★★★ 추가: MainWindow UI 업데이트 ★★★
+                // MainWindow UI 업데이트
                 SafetyCheckUI.UpdatePPEUI(ppeResult.HasHelmet, ppeResult.HasVest, ppeResult.HasGloves, ppeResult.HasGoggles);
+                await Task.Delay(200);
 
-                // ★★★ 추가: UI 업데이트가 화면에 반영될 시간 확보 ★★★
-                await Task.Delay(500);
-
-                // 4. ★★★ 모든 작업자 기본 이미지 캡처 (PPE 착용 여부 무관) ★★★
+                // 4. 모든 작업자 기본 이미지 캡처 (PPE 착용 여부 무관)
                 string workerId = recognizedWorker?.WorkerId ?? "UNKNOWN";
-
-                bool alreadyCaptured = false;
-                if (workerId != "UNKNOWN")
-                {
-                    alreadyCaptured = WorkerSessionManager.WorkersImageCap(workerId);
-                }
-
-                if (!alreadyCaptured)
-                {
-                    // 모든 작업자 기본 이미지 캡처
-                    await WorkersCap.CaptureWorkerImage(frame.Clone());
-                    Debug.WriteLine($"{workerId} 작업자 이미지 캡처 완료");
-
-                    // 캡처 완료 마킹 (인식된 작업자만)
-                    if (workerId != "UNKNOWN")
-                    {
-                        WorkerSessionManager.MarkAsCaptured(workerId);
-                    }
-                }
-                else
-                {
-                    Debug.WriteLine($"{workerId}는 이미 캡처 완료됨. 기본 이미지 캡처 생략.");
-                }
-
-                // 5. ★★★ PPE 위반자라면 추가로 위반 이미지 캡처 ★★★
                 bool hasViolation = !ppeResult.HasHelmet || !ppeResult.HasVest || !ppeResult.HasGloves || !ppeResult.HasGoggles;
 
-                if (hasViolation)
+                _ = Task.Run(async () =>
                 {
-                    // 위반 이미지는 항상 캡처 (중복 체크 안 함)
-                    await WorkersCap.CaptureViolationImage(frame.Clone());
-                    Debug.WriteLine($"{workerId} PPE 위반 이미지 캡처 완료 (추가)");
-
-                    // 이메일 알림 (쿨다운 체크)
-                    if (DateTime.Now - lastEmailAlert > emailCooldown)
+                    try
                     {
-                        lastEmailAlert = DateTime.Now;
-                        _ = SafetyAlert.ProcessViolation(workerId, !ppeResult.HasHelmet, !ppeResult.HasVest, !ppeResult.HasGloves, !ppeResult.HasGoggles);
+                        bool alreadyCaptured = false;
+                        if (workerId != "UNKNOWN")
+                        {
+                            alreadyCaptured = WorkerSessionManager.WorkersImageCap(workerId);
+                        }
+
+                        if (!alreadyCaptured)
+                        {
+                            // 기본 이미지 캡처
+                            await WorkersCap.CaptureWorkerImage(capturedFrame.Clone());
+                            Debug.WriteLine($"{workerId} 작업자 이미지 캡처 완료");
+
+                            if (workerId != "UNKNOWN")
+                            {
+                                WorkerSessionManager.MarkAsCaptured(workerId);
+                            }
+                        }
+
+                        // PPE 위반 시 추가 이미지 캡처
+                        if (hasViolation)
+                        {
+                            await WorkersCap.CaptureViolationImage(capturedFrame.Clone());
+                            Debug.WriteLine($"{workerId} PPE 위반 이미지 캡처 완료");
+
+                            // 이메일 알림
+                            if (DateTime.Now - lastEmailAlert > emailCooldown)
+                            {
+                                lastEmailAlert = DateTime.Now;
+                                _ = SafetyAlert.ProcessViolation(workerId, !ppeResult.HasHelmet, !ppeResult.HasVest, !ppeResult.HasGloves, !ppeResult.HasGoggles);
+                            }
+                        }
                     }
-                }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"백그라운드 이미지 캡처 오류: {ex.Message}");
+                    }
+                    finally
+                    {
+                        capturedFrame?.Dispose();
+                    }
+                });
 
                 // 6. MainWindow 카메라 중지
                 MainWin.StopCamera();

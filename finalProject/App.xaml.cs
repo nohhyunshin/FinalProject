@@ -14,6 +14,8 @@ namespace finalProject
         {
             base.OnStartup(e);
 
+            this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
             // Worker 데이터 초기화
             WorkerManager.Initialize();
         }

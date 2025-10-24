@@ -159,6 +159,9 @@ namespace finalProject.Views
                 {
                     factoryControl.StopFactoryIOSystem();
                     Debug.WriteLine("컨베이어 정지 및 PLC 초기화 완료");
+
+                    factoryControl.ActualClose();
+                    Debug.WriteLine("PCB 분석 Vision WPF 종료");
                 }
 
                 Debug.WriteLine(

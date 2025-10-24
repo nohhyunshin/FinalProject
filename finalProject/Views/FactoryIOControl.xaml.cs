@@ -868,7 +868,7 @@ namespace finalProject.Views
 
             if (errorEnter)
             {
-                // ⭐ 컨베이어 정지 시작
+                // 컨베이어 정지 시작
                 errorSortConvStop = true;
                 errorSortConvStopTimer = 0;
 
@@ -877,7 +877,7 @@ namespace finalProject.Views
                     errorsBoxNeeded = true;
                 }
 
-                // ⭐⭐ 카메라 작업 없이 이미 분석된 결과만 사용 ⭐⭐
+                // 카메라 작업 없이 이미 분석된 결과만 사용
                 List<string> detectedDefects = _roiProcessor.LastDetectedDefects?.ToList() ?? new List<string>();
                 string defectInfo = detectedDefects.Count > 0
                     ? string.Join(", ", detectedDefects)
@@ -916,7 +916,7 @@ namespace finalProject.Views
                 }
             }
 
-            // ⭐⭐ 컨베이어 정지 타이머 (2초 = 50ms * 40 = 2000ms) ⭐⭐
+            // 컨베이어 정지 타이머 (2초 = 50ms * 40 = 2000ms)
             if (errorSortConvStop)
             {
                 errorSortConvStopTimer++;
@@ -928,7 +928,7 @@ namespace finalProject.Views
                 }
             }
 
-            // ⭐⭐ 조명 제어 수정 ⭐⭐
+            // 조명 제어 수정
             if (factoryInputs[FactoryAddresses.INPUT_ERROR_SORT_SENSOR])
             {
                 // 센서에 제품이 있을 때만 조명 제어
@@ -1016,20 +1016,8 @@ namespace finalProject.Views
         {
             try
             {
-                // ResultDashboard 인스턴스를 찾아서 업데이트
-                // (ResultDashboard가 별도 창으로 열려있거나, 참조를 가지고 있다면)
-
-                // 방법 1: ResultDashboard의 정적 메서드나 싱글톤 패턴 사용
-                // ResultDashboard.Instance?.UpdateStatistics(inspectionStats);
-
-                // 방법 2: 이벤트를 통한 업데이트
+                // 이벤트를 통한 업데이트
                 OnStatisticsUpdated?.Invoke(inspectionStats);
-
-                // 방법 3: 직접 참조를 통한 업데이트 (ResultDashboard 인스턴스를 멤버로 가지고 있는 경우)
-                // if (resultDashboard != null)
-                // {
-                //     resultDashboard.UpdateUI(inspectionStats);
-                // }
             }
             catch (Exception ex)
             {
@@ -1144,8 +1132,15 @@ namespace finalProject.Views
 
         private void FactoryIOControl_Closing(object sender, CancelEventArgs e)
         {
-            Console.WriteLine("=== FactoryIOControl 종료 시작 ===");
-            _isClosing = true;
+            // 실제 종료가 아닌 경우 (X 버튼 클릭)
+            if (!_isClosing)
+            {
+                e.Cancel = true;  // 창 닫기 취소
+                this.Hide();      // 창만 숨기기
+                LogMessage("Vision 창이 숨겨졌습니다. (카메라는 계속 동작 중)");
+                return;
+            }
+
             try
             {
                 // 1. PLC 타이머 정지
@@ -1158,7 +1153,7 @@ namespace finalProject.Views
                 ResetAllOutputs();
                 Console.WriteLine("출력 리셋 완료");
 
-                // ⭐⭐ 3. PLC 신호 리셋 및 연결 해제 ⭐⭐
+                // 3. PLC 신호 리셋 및 연결 해제 ⭐⭐
                 if (plcManager != null)
                 {
                     LogMessage("PLC 종료 처리 중...");
@@ -1192,7 +1187,14 @@ namespace finalProject.Views
             }
         }
 
-        // ⭐ 카메라 리소스 정리 메서드 (강화)
+        // 대시보드에서 실제로 프로그램 종료할 때 호출
+        public void ActualClose()
+        {
+            _isClosing = true;
+            this.Close();
+        }
+
+        // 카메라 리소스 정리 메서드 (강화)
         private void StopCameraResources()
         {
             Console.WriteLine("=== 카메라 리소스 정리 시작 ===");

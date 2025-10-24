@@ -187,17 +187,40 @@ namespace finalProject.Views
 
             try
             {
+                Debug.WriteLine("=== WorkersInfo 창 종료 - 프로그램 종료 시작 ===");
+
                 // SafetyCheck 리소스 정리
                 SafetyCheck.Cleanup();
 
-                // ⭐ FactoryIOControl은 정리하지 않음 (대시보드에서 사용 중)
-                // factoryIOControl은 ResultDashboard로 전달되므로 여기서 Dispose 하지 않습니다.
+                // ⭐ FactoryIOControl 완전히 종료
+                if (factoryIOControl != null)
+                {
+                    // Factory IO 시스템이 실행 중이면 정지
+                    if (factoryIOControl.IsSystemRunning())
+                    {
+                        factoryIOControl.StopFactoryIOSystem();
+                    }
 
-                Debug.WriteLine("WorkersInfo 창이 닫혔습니다.");
+                    // FactoryIOControl 창도 완전히 닫기
+                    factoryIOControl.ActualClose();
+                }
+
+                // MainWindow도 정리
+                if (SafetyCheck.MainWin != null)
+                {
+                    SafetyCheck.MainWin.Close();
+                }
+
+                Debug.WriteLine("=== WorkersInfo 창 종료 완료 ===");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"WorkersInfo 종료 중 오류: {ex.Message}");
+            }
+            finally
+            {
+                // 전체 애플리케이션 종료
+                Application.Current.Shutdown();
             }
         }
     }
